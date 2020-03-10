@@ -1,0 +1,43 @@
+#!/bin/bash
+
+APP_ROOT=/data/software/tomcat-uenrms/webapps
+DAEMON=uenrms
+APP_TYPE=war
+SIGN=uenrms
+
+JKS_CACHE_ROOT=/opt/jenkins/dev/$SIGN
+RUN_USER=uenpay
+RUN_GROUP=$RUN_USER
+
+APP=${SIGN}.${APP_TYPE}
+CACHE_DIR=$JKS_CACHE_ROOT/tmp
+BACKUP_DIR=$JKS_CACHE_ROOT/backup
+
+[ ! -d $APP_ROOT ] && echo "路径${APP_ROOT}不存在, 程序无法运行. " && exit 1
+[ ! -d $BACKUP_DIR ] && mkdir -p $BACKUP_DIR
+[ ! -d $CACHE_DIR ] && mkdir -p $CACHE_DIR
+
+ROLLBACK_STATUS=$(cat $JKS_CACHE_ROOT/rollback.status)
+
+if [ $APP_TYPE = 'jar' ];then
+    service $DAEMON stop || exit 1
+    if [ $ROLLBACK_STATUS = 1 ];then
+        /bin/rm -rf $APP_ROOT/$APP
+        /bin/cp -f $BACKUP_DIR/$APP $APP_ROOT/$APP
+        chown -R $RUN_USER:$RUN_GROUP $APP_ROOT/$APP 2>/dev/null
+    fi
+    service $DAEMON restart
+elif [ $APP_TYPE = 'war' ];then
+    service $DAEMON forcestop || exit 1
+    if [ $ROLLBACK_STATUS = 1 ];then
+        /bin/rm -rf $APP_ROOT/$APP $APP_ROOT/$SIGN
+        /bin/cp -f $BACKUP_DIR/$APP $APP_ROOT/$APP
+        chown -R $RUN_USER:$RUN_GROUP $APP_ROOT/$SIGN $APP_ROOT/$APP 2>/dev/null
+    fi
+    service $DAEMON forcerestart
+else
+    echo "发布包类型只能是jar或war. "
+    exit 1
+fi
+
+exit 0

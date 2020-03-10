@@ -1,0 +1,54 @@
+#!/bin/bash
+
+## Source files: **/target/*.jar
+## Remote directory: dev/rms/tmp
+
+APP_ROOT=/data/software/rms
+DAEMON=rms
+APP_TYPE=jar
+SIGN=rms
+
+JKS_CACHE_ROOT=/opt/jenkins/dev/$SIGN
+RUN_USER=uenpay
+RUN_GROUP=$RUN_USER
+BACKUP_EXPIRE=14
+
+APP=${SIGN}.${APP_TYPE}
+NOW_TIME=$(date +%Y-%m-%d_%H-%M-%S)
+CACHE_DIR=$JKS_CACHE_ROOT//tmp
+BACKUP_DIR=$JKS_CACHE_ROOT/backup
+
+
+[ ! -d $APP_ROOT ] && echo "路径${APP_ROOT}不存在, 程序无法运行. " && exit 1
+[ ! -d $BACKUP_DIR ] && mkdir -p $BACKUP_DIR
+[ ! -d $CACHE_DIR ] && mkdir -p $CACHE_DIR
+
+[ -f "$BACKUP_DIR/$APP" ] && /bin/mv -f $BACKUP_DIR/$APP $BACKUP_DIR/${APP}-${NOW_TIME}
+echo '0' > $JKS_CACHE_ROOT/rollback.status
+
+if [ -f "$APP_ROOT/$APP" ];then
+    /bin/cp -f $APP_ROOT/$APP $BACKUP_DIR/$APP && echo '1' > $JKS_CACHE_ROOT/rollback.status
+fi
+
+if [ $APP_TYPE = 'jar' ];then
+    service $DAEMON stop || exit 1
+    /bin/rm -rf $APP_ROOT/$APP
+    /bin/cp -f $CACHE_DIR/target/*.${APP_TYPE} $APP_ROOT/$APP
+    chown -R $RUN_USER:$RUN_GROUP $APP_ROOT/$APP 2>/dev/null
+    service $DAEMON restart
+elif [ $APP_TYPE = 'war' ];then
+    service $DAEMON forcestop || exit 1
+    /bin/rm -rf $APP_ROOT/$APP $APP_ROOT/$SIGN
+    /bin/cp -f $CACHE_DIR/target/*.${APP_TYPE} $APP_ROOT/$APP
+    chown -R $RUN_USER:$RUN_GROUP $APP_ROOT/${SIGN} $APP_ROOT/$APP 2>/dev/null
+    service $DAEMON forcerestart
+else
+    echo "发布包类型只能是jar或war. "
+    exit 1
+fi
+
+chkconfig $DAEMON on
+find $BACK_DIR  -name "${APP_TYPE}*" -type f -mtime +${BACKUP_EXPIRE} -exec /bin/rm -f {} \;
+
+exit 0
+
